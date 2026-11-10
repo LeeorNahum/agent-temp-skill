@@ -1,0 +1,12 @@
+{
+  "name": "agent-temp",
+  "version": "1.0.0",
+  "description": "Creates per-task temp folders under one root and prunes what has gone stale.",
+  "type": "module",
+  "bin": {
+    "agent-temp": "scripts/agent-temp.mjs"
+  },
+  "files": [
+    "scripts/agent-temp.mjs"
+  ]
+}
