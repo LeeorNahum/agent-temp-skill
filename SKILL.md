@@ -1,15 +1,15 @@
 ---
 name: "agent-temp"
-description: "Use whenever an agent on a real computer, not a throwaway cloud sandbox, needs scratch space: downloads, extracted archives, generated test files, build output, evals, isolated builds, clones, logs, or any file it will not keep. Keeps all agent temp under one root that sits outside the home folder by default, prunes stale temp before creating more, and keeps agent temp out of drive roots, the home folder, and the OS temp folder."
+description: "Use whenever an agent on a real computer, not a throwaway cloud sandbox, needs scratch space or a scratchpad: downloads, extracted archives, generated test files, build output, evals, isolated builds, clones, logs, or any file it will not keep. Keeps all agent temp under one root that sits outside the home folder by default, prunes stale temp before creating more, and keeps agent temp out of drive roots, the home folder, and the OS temp folder."
 compatibility: "Requires Node.js 18 or later. The GitHub route also requires npm and network access when uncached."
 metadata:
   author: "Leeor Nahum"
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Agent Temp
 
-All agent temp lives under one root, so it never piles up in scattered folders.
+All agent temp lives under one root, so it never piles up in scattered folders. A request for a scratchpad or scratch space means this root: the work goes in the task's own folder under it.
 
 | System | Root |
 | --- | --- |
