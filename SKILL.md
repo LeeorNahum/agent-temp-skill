@@ -4,7 +4,7 @@ description: "Use whenever an agent on a real computer, not a throwaway cloud sa
 compatibility: "Requires Node.js 18 or later. The GitHub route also requires npm and network access when uncached."
 metadata:
   author: "Leeor Nahum"
-  version: "1.1.0"
+  version: "1.1.1"
 ---
 
 # Agent Temp
@@ -53,6 +53,7 @@ Claude Code puts its scratchpad under the root once `CLAUDE_CODE_TMPDIR` is set 
 ## Rules
 
 - Anything worth keeping past the task is moved into the project it belongs to, never left in temp.
+- A Git worktree holds unfinished work on a branch and is not temp. Keep it where the harness creates worktrees, or beside its repository, never under the root, where pruning would delete its uncommitted changes.
 - Beyond the root above, never create folders at the root of a drive, in the home folder, or directly in the OS temp folder.
 - Pass every path in the form the receiving program expects. A POSIX-style drive path such as `/c/...` handed to a Windows program creates a stray folder on the current drive, so convert it first.
 - Evals and isolated builds go in a per-task folder too. A folder under the home folder inherits the user's own agent skills and settings from its ancestors.
