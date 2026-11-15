@@ -1,6 +1,6 @@
 {
   "name": "agent-temp",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Creates per-task temp folders under one root and prunes what has gone stale.",
   "type": "module",
   "bin": {

@@ -1,10 +1,10 @@
 ---
 name: "agent-temp"
-description: "Use whenever an agent on a real computer, not a throwaway cloud sandbox, needs scratch space or a scratchpad: downloads, extracted archives, generated test files, build output, evals, isolated builds, clones, logs, or any file it will not keep. Keeps all agent temp under one root that sits outside the home folder by default, prunes stale temp before creating more, and keeps agent temp out of drive roots, the home folder, and the OS temp folder."
+description: "Use whenever an agent needs scratch space or a scratchpad: downloads, extracted archives, generated test files, build output, evals, isolated builds, clones or worktrees it makes itself, logs, or any file it will not keep. Keeps all agent temp under one root that sits outside the home folder by default, prunes stale temp before creating more without deleting Git work that exists nowhere else, and keeps agent temp out of drive roots, the home folder, and the OS temp folder."
 compatibility: "Requires Node.js 18 or later. The GitHub route also requires npm and network access when uncached."
 metadata:
   author: "Leeor Nahum"
-  version: "1.1.1"
+  version: "1.2.0"
 ---
 
 # Agent Temp
@@ -18,7 +18,7 @@ All agent temp lives under one root, so it never piles up in scattered folders. 
 
 ## Before Creating Temp
 
-Run the [script](scripts/agent-temp.mjs) once per task, before the first temp folder is made. It deletes what has gone untouched for 14 days, and `new` then creates the task's folder and prints its path.
+Run the [script](scripts/agent-temp.mjs) once per task, before the first temp folder is made. It deletes what has gone untouched for 30 days, unless it holds Git work that exists nowhere else, and `new` then creates the task's folder and prints its path.
 
 Either of these, whichever is available:
 
@@ -48,14 +48,14 @@ node scripts/agent-temp.mjs prune
 
 Each parallel session or subagent uses its own per-task folder or scratchpad, never a sibling's.
 
-Claude Code puts its scratchpad under the root once `CLAUDE_CODE_TMPDIR` is set to the root in user or managed settings before the session starts. The prune covers the `claude` (Windows) or `claude-<uid>` (macOS and Linux) folder Claude Code adds beneath it.
+Claude Code puts its scratchpad under the root once `CLAUDE_CODE_TMPDIR` is set to the root before the session starts. When the `env` block of its user settings (`settings.json` in `~/.claude`, or in `CLAUDE_CONFIG_DIR` when that is set) has no `CLAUDE_CODE_TMPDIR`, add it there with the root as its value and leave the rest of the file as it was. It takes effect from the next session. The prune covers the `claude` (Windows) or `claude-<uid>` (macOS and Linux) folder Claude Code adds beneath it.
 
 ## Rules
 
-- Anything worth keeping past the task is moved into the project it belongs to, never left in temp.
-- A Git worktree holds unfinished work on a branch and is not temp. Keep it where the harness creates worktrees, or beside its repository, never under the root, where pruning would delete its uncommitted changes.
+- Anything worth keeping past the task is moved into the project it belongs to, never left in temp. A task deletes its own folder when it ends, once its work is pushed or moved into its project, and empties a scratchpad the harness gave it instead of deleting it. The 30-day prune is the backstop for abandoned folders.
+- Worktrees and clones an agent makes itself go in its task folder. A harness's own worktrees stay where that harness puts them, since the harness tracks and cleans them.
 - Beyond the root above, never create folders at the root of a drive, in the home folder, or directly in the OS temp folder.
 - Pass every path in the form the receiving program expects. A POSIX-style drive path such as `/c/...` handed to a Windows program creates a stray folder on the current drive, so convert it first.
 - Evals and isolated builds go in a per-task folder too. A folder under the home folder inherits the user's own agent skills and settings from its ancestors.
 - Keep no secrets in temp past the end of the task. Delete credentials, tokens, and private data the moment they are no longer needed.
-- Pruning judges age by the newest file inside a folder, so a running task's folder is safe while it writes files. Do not touch another task's folder.
+- Pruning judges age by the newest file inside a folder, so a running task's folder is safe while it writes files. It keeps a folder holding a Git checkout or repository, at any depth, with uncommitted changes, untracked files that are not ignored, stashes, commits not on any remote-tracking branch, no remote, a linked worktree outside the folder, or a state it cannot inspect. Do not touch another task's folder.
