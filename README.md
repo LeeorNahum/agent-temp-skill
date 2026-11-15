@@ -1,9 +1,9 @@
 # agent-temp-skill
 
-An Agent Skill that keeps every coding agent's temp files under one root, outside the home folder by default, and prunes stale temp each time an agent needs more without deleting Git work that exists nowhere else.
+An Agent Skill that keeps every coding agent's temp files under one root, outside the home folder by default, prunes stale temp each time an agent needs more, and has each agent remove its own temp when done, never deleting Git work that exists nowhere else.
 
 - `SKILL.md` holds the trigger, the root, the commands, and the rules.
-- `scripts/agent-temp.mjs` prunes the root and creates per-task folders. Node.js 18 or later, no dependencies.
+- `scripts/agent-temp.mjs` prunes the root, creates per-task folders, and removes the one task folder or scratchpad it is given. Node.js 18 or later, no dependencies.
 - `package.json` makes the script runnable from the public repository.
 - `AGENTS.md` is the maintenance contract.
 
