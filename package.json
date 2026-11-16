@@ -1,7 +1,7 @@
 {
   "name": "agent-temp",
-  "version": "1.3.0",
-  "description": "Creates per-task temp folders under one root, removes the one task folder or scratchpad it is given, and prunes what has gone stale.",
+  "version": "1.4.0",
+  "description": "Creates per-task temp folders under one root, removes the one temp file or folder it is given, and prunes what has gone stale.",
   "type": "module",
   "bin": {
     "agent-temp": "scripts/agent-temp.mjs"

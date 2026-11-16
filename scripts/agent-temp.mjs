@@ -19,8 +19,8 @@ Usage:
       Delete what has gone untouched for the age limit, except Git work
       that exists nowhere else.
   agent-temp clean <path> [--dry-run] [options]
-      Delete one task folder, or empty one Claude Code scratchpad, unless it
-      holds Git work that exists nowhere else.
+      Delete one temp file or folder, or empty one Claude Code scratchpad,
+      unless it holds Git work that exists nowhere else.
   agent-temp root [options]
       Print the root path.
 
@@ -34,10 +34,11 @@ Options:
   --no-prune              With new, skip the prune.
   -h, --help              Show this help.
 
-An entry directly under the root (or under the root's claude or claude-<uid>
-folder, or under that folder's bundled-skills) is deleted only when its newest
-file is older than the age limit. A folder with no files is judged by its own
-modified time. Links are never followed. The root itself is never deleted.
+An entry directly under the root (or a session under a project in the root's
+claude or claude-<uid> folder, or a version under that folder's bundled-skills)
+is deleted only when its newest file is older than the age limit. A folder
+with no files is judged by its own modified time. Links are never followed. The
+root itself is never deleted.
 
 An old entry is kept when a Git checkout or repository anywhere inside it has
 uncommitted changes, untracked files that are not ignored, stashes, commits not
@@ -45,17 +46,21 @@ on any remote-tracking branch, no remote, a linked worktree outside the entry,
 or anything that cannot be inspected. Entries under bundled-skills are judged
 by age alone.
 
-clean acts on exactly the path it is given, which must be a folder directly
-under the root, deleted whole, or a scratchpad at
-<root>/claude[-<uid>]/<project>/<session>/scratchpad, emptied and left in
-place. It refuses any other path, a link, and a missing path. It runs the same
-Git check as prune, at any depth, and also keeps a path that sits inside a Git
-checkout. When either finds work to keep, it deletes nothing. Ignored files do
-not count as work. It cannot tell which task a folder belongs to. On Windows,
-a file open in another program also stops it before anything changes, and
---dry-run skips that test. It exits 0 when done, 1 when a delete failed
-partway, 2 when it refuses the path, and 3 when it keeps the folder and
-deletes nothing.
+clean acts on exactly the path it is given:
+  - a scratchpad at <root>/claude[-<uid>]/<project>/<session>/scratchpad is
+    emptied and left in place
+  - a file or folder inside a scratchpad is deleted
+  - a file or folder directly under the root, or inside a folder there, is
+    deleted, except the claude or claude-<uid> folder and what it holds
+It refuses any other path, a link, and a missing path. It runs the same Git
+check as prune, at any depth. It also keeps a path inside a Git checkout or Git
+folder, and a path inside a task folder or scratchpad that holds any Git
+repository, which only the prune of that whole folder removes. When it finds
+work to keep, it deletes nothing. Ignored files do not count as work. It cannot
+tell which task a folder belongs to. On Windows, a file open in another program
+also stops it before anything changes, and --dry-run skips that test. It exits
+0 when done, 1 when a delete failed partway, 2 when it refuses the path, and 3
+when it keeps the path and deletes nothing.
 `;
 
 function fail(message) {
@@ -430,6 +435,12 @@ function prune(root, maxAgeDays, dryRun) {
         visit(path, "bundled");
         continue;
       }
+      // Each session in a project folder is judged alone, so an old session's
+      // scratchpad goes even while newer sessions keep the project in use.
+      if (isFolder && level === "holder") {
+        visit(path, "project");
+        continue;
+      }
       const ageDays = (now - newestMtime(path, stat)) / DAY_MS;
       if (ageDays <= maxAgeDays) {
         result.kept++;
@@ -481,9 +492,11 @@ function report(result, json) {
   );
 }
 
-// The one folder clean may act on, or a refusal saying why not. Only a folder
-// directly under the root, or a Claude Code scratchpad, which the harness made
-// and is emptied rather than deleted, is accepted.
+// The one file or folder clean may act on, or a refusal saying why not. A
+// Claude Code scratchpad, which the harness made, is emptied rather than
+// deleted. Anything else is accepted only when it is an entry directly under the
+// root, or inside one, other than the claude or claude-<uid> folder, or inside a
+// scratchpad.
 function cleanTarget(root, pathArg) {
   checkPathForm(pathArg);
   const written = resolve(pathArg);
@@ -493,21 +506,22 @@ function cleanTarget(root, pathArg) {
   } catch (error) {
     fail(error.code === "ENOENT" ? `refusing ${written}: it does not exist` : `refusing ${written}: it could not be read (${error.code})`);
   }
-  if (stat.isSymbolicLink()) fail(`refusing ${written}: it is a link, name the folder itself`);
-  if (!stat.isDirectory()) fail(`refusing ${written}: it is not a folder`);
+  if (stat.isSymbolicLink()) fail(`refusing ${written}: it is a link, name the file or folder itself`);
+  if (!stat.isDirectory() && !stat.isFile()) fail(`refusing ${written}: it is not a file or folder`);
   // Where the path really leads decides, so a link above it cannot carry clean
   // outside the root.
   const path = realpathSync.native(written);
   if (norm(path) === norm(root)) fail(`refusing the root itself: ${path}`);
   if (!isSameOrInside(path, root)) fail(`refusing ${path}: it is outside the root ${root}`);
   const parts = path.slice(root.length).split(sep).filter(Boolean);
-  if (parts.length === 1 && isHarnessHolder(parts[0])) {
-    fail(`refusing ${path}: it holds every Claude Code session's temp, name one scratchpad instead`);
-  }
-  const scratchpad =
-    parts.length === 4 && isHarnessHolder(parts[0]) && !sameName(parts[1], BUNDLED_SKILLS) && sameName(parts[3], "scratchpad");
-  if (parts.length !== 1 && !scratchpad) {
-    fail(`refusing ${path}: clean takes a folder directly under the root or a Claude Code scratchpad`);
+  // A file directly under the root is a loose entry, even with a holder's name.
+  let scratchpad = false;
+  if (isHarnessHolder(parts[0]) && (parts.length > 1 || stat.isDirectory())) {
+    if (parts.length === 1) fail(`refusing ${path}: it holds every Claude Code session's temp, name one scratchpad instead`);
+    const inScratchpad = parts.length >= 4 && !sameName(parts[1], BUNDLED_SKILLS) && sameName(parts[3], "scratchpad");
+    if (!inScratchpad) fail(`refusing ${path}: under ${parts[0]}, clean takes only a scratchpad or something inside one`);
+    scratchpad = parts.length === 4;
+    if (scratchpad && !stat.isDirectory()) fail(`refusing ${path}: it is not a folder`);
   }
   // A process cannot delete the folder it runs in on every system, so a partly
   // deleted folder is avoided up front. A scratchpad stays, so running in it is fine.
@@ -515,7 +529,10 @@ function cleanTarget(root, pathArg) {
   if (isSameOrInside(cwd, path) && !(scratchpad && norm(cwd) === norm(path))) {
     fail(`refusing ${path}: the current folder is inside it, run clean from another folder`);
   }
-  return { path, empty: scratchpad };
+  // The unit is the folder directly under the root, or the scratchpad. A path
+  // inside one is judged with all of it.
+  const unit = join(root, ...parts.slice(0, isHarnessHolder(parts[0]) && parts.length > 1 ? 4 : 1));
+  return { path, unit, empty: scratchpad, folder: stat.isDirectory() };
 }
 
 // Exit code of clean when it keeps the folder and deletes nothing.
@@ -524,13 +541,22 @@ const KEPT = 3;
 // Deletes the folder, or empties the scratchpad, once the Git check finds
 // nothing to keep. Returns the process exit code.
 function clean(root, pathArg, dryRun) {
-  const { path, empty } = cleanTarget(root, pathArg);
+  const { path, unit, empty, folder } = cleanTarget(root, pathArg);
   const kept = (at, reason) => {
     console.error(`agent-temp: kept ${path} and deleted nothing: ${at} ${reason}`);
     return KEPT;
   };
-  // The scan below looks only down, so a checkout above the path, which would
-  // own its files, is looked for separately, up to and including the root.
+  // Git work elsewhere in the same unit can own this path, as a Git folder whose
+  // working tree it is does, or depend on it, as a clone borrowing its objects
+  // does. A path inside a unit holding any Git work is left for the whole unit.
+  if (norm(unit) !== norm(path)) {
+    const found = findGit(unit);
+    if (found === null) return kept(unit, "has a part that could not be read");
+    const first = found.checkouts[0] ?? found.stores[0];
+    if (first) return kept(first, `is Git work in ${unit}, which may own or depend on this path, so it goes only with that whole folder, through the prune`);
+  }
+  // The scan below looks only down, so a checkout or Git folder above the path,
+  // which would own it, is looked for separately, up to and including the root.
   for (let dir = dirname(path); isSameOrInside(dir, root); dir = dirname(dir)) {
     let entries;
     try {
@@ -539,9 +565,12 @@ function clean(root, pathArg, dryRun) {
       return kept(dir, unreadable);
     }
     if (hasName(entries, ".git")) return kept(dir, "is a Git checkout that holds it, so its work was not inspected");
+    if (hasName(entries, "objects") && (hasName(entries, "HEAD") || hasName(entries, "refs"))) {
+      return kept(dir, "is a Git folder that holds it");
+    }
     if (norm(dir) === norm(root)) break;
   }
-  const hold = gitHold(path);
+  const hold = folder ? gitHold(path) : { worktrees: [] };
   if (hold.reason) return kept(hold.at, hold.reason);
   if (dryRun) {
     console.log(`would ${empty ? "empty" : "delete"} ${path}`);
@@ -550,7 +579,7 @@ function clean(root, pathArg, dryRun) {
   // Everything goes into one tombstone first. On Windows, where an open file
   // blocks a delete, it blocks this move too, so clean stops with nothing changed rather
   // than partway through, which could leave a checkout too broken to inspect.
-  const tomb = join(empty ? path : root, `.agent-temp-deleting-${randomBytes(3).toString("hex")}`);
+  const tomb = join(empty ? path : dirname(path), `.agent-temp-deleting-${randomBytes(3).toString("hex")}`);
   if (empty) {
     mkdirSync(tomb);
     const moved = [];
@@ -625,7 +654,7 @@ if (command === "root") {
   report(result, Boolean(flags.json));
   if (result.failed.length) process.exitCode = 1;
 } else if (command === "clean") {
-  if (rest.length !== 1 || !rest[0].trim()) fail("clean takes one path, the task folder or scratchpad to remove");
+  if (rest.length !== 1 || !rest[0].trim()) fail("clean takes one path, the task folder, scratchpad, or temp file or folder to remove");
   for (const flag of ["json", "harness", "no-prune", "max-age-days"]) {
     if (flag in flags) fail(`--${flag} does not apply to clean`);
   }
